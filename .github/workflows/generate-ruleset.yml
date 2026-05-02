@@ -21,21 +21,24 @@ jobs:
             curl -fsSL "$BASE/$f" -o "$f"
           done
 
-      - name: Generate blocked_domains.conf
+      - name: Generate and split conf files
         run: |
+          # 重複排除してから2,000,000行ずつ分割
           awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 ",REJECT" }' \
             hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing \
             | sort -u \
-            > blocked_domains.conf
-          wc -l blocked_domains.conf
-          du -sh blocked_domains.conf
+            | split -l 2000000 --numeric-suffixes=0 --suffix-length=2 - blocked_
+          # 拡張子を付ける
+          for f in blocked_[0-9][0-9]; do mv "$f" "${f}.conf"; done
+          wc -l blocked_*.conf
+          du -sh blocked_*.conf
 
-      - name: Upload to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push
         run: |
-          gh release delete latest --yes 2>/dev/null || true
-          gh release create latest blocked_domains.conf \
-            --title "Latest blocked_domains.conf" \
-            --notes "Auto-generated from columndeeply/hosts" \
-            --latest
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rm -f blocked_*.conf 2>/dev/null || true
+          git add blocked_*.conf
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Update blocked_*.conf"
+          git push
