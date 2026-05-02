@@ -1,0 +1,38 @@
+name: Generate Shadowrocket RULE-SET
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 毎日 UTC 03:00 に実行
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download hosts files
+        run: |
+          BASE=https://raw.githubusercontent.com/columndeeply/hosts/main
+          for f in hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing; do
+            curl -fsSL "$BASE/$f" -o "$f"
+          done
+
+      - name: Generate blocked_domains.conf
+        run: |
+          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 ",REJECT" }' \
+            hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing \
+            > blocked_domains.conf
+          wc -l blocked_domains.conf
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add blocked_domains.conf
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Update blocked_domains.conf"
+          git push
