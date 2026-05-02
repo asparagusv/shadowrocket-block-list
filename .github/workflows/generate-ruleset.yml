@@ -24,7 +24,7 @@ jobs:
       - name: Generate and split conf files
         run: |
           # 重複排除してから2,000,000行ずつ分割
-          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 ",REJECT" }' \
+          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 }' \
             hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing \
             | sort -u \
             | split -l 2000000 --numeric-suffixes=0 --suffix-length=2 - blocked_
