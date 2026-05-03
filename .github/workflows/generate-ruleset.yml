@@ -14,36 +14,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download hosts files
+      - name: Resolve current blocklist filename
+        id: meta
         run: |
-          BASE=https://raw.githubusercontent.com/columndeeply/hosts/main
-          for f in hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing; do
-            curl -fsSL "$BASE/$f" -o "$f"
-          done
+          NAME=$(curl -fsSL https://raw.githubusercontent.com/Bon-Appetit/porn-domains/main/meta.json \
+            | jq -r '.blocklist.name')
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Resolved blocklist file: $NAME"
 
-      - name: Generate split blocked_*.txt from hosts00-05
+      - name: Download blocklist
         run: |
-          # 既存ファイルをクリア
-          rm -f blocked_*.txt safebrowsing.txt
-          # 重複排除してから2,000,000行ずつ分割
-          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 }' \
-            hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 \
-            | sort -u \
-            | split -l 2000000 --numeric-suffixes=0 --suffix-length=2 - blocked_
-          for f in blocked_[0-9][0-9]; do mv "$f" "${f}.txt"; done
-          wc -l blocked_*.txt
+          curl -fsSL "https://raw.githubusercontent.com/Bon-Appetit/porn-domains/main/${{ steps.meta.outputs.name }}" \
+            -o blocklist.raw
 
-      - name: Generate safebrowsing.txt
+      - name: Generate blocked.txt
         run: |
-          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 }' safebrowsing \
-            | sort -u > safebrowsing.txt
-          wc -l safebrowsing.txt
+          # 各行を DOMAIN-SUFFIX,<domain> に変換 (空行・コメント除外)
+          awk 'NF>0 && $0!~/^#/ { print "DOMAIN-SUFFIX," $1 }' blocklist.raw \
+            | sort -u > blocked.txt
+          wc -l blocked.txt
+          du -sh blocked.txt
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add blocked_*.txt safebrowsing.txt
+          # 旧成果物の掃除
+          git rm -f blocked_*.txt safebrowsing.txt blocked_*.conf 2>/dev/null || true
+          git add blocked.txt
           git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "Update rule-set txt files"
+          git commit -m "Update blocked.txt"
           git push
