@@ -21,24 +21,29 @@ jobs:
             curl -fsSL "$BASE/$f" -o "$f"
           done
 
-      - name: Generate and split conf files
+      - name: Generate split blocked_*.txt from hosts00-05
         run: |
+          # 既存ファイルをクリア
+          rm -f blocked_*.txt safebrowsing.txt
           # 重複排除してから2,000,000行ずつ分割
           awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 }' \
-            hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 safebrowsing \
+            hosts00 hosts01 hosts02 hosts03 hosts04 hosts05 \
             | sort -u \
             | split -l 2000000 --numeric-suffixes=0 --suffix-length=2 - blocked_
-          # 拡張子を付ける
-          for f in blocked_[0-9][0-9]; do mv "$f" "${f}.conf"; done
-          wc -l blocked_*.conf
-          du -sh blocked_*.conf
+          for f in blocked_[0-9][0-9]; do mv "$f" "${f}.txt"; done
+          wc -l blocked_*.txt
+
+      - name: Generate safebrowsing.txt
+        run: |
+          awk 'NF==2 && $1!~/^#/ { print "DOMAIN-SUFFIX," $2 }' safebrowsing \
+            | sort -u > safebrowsing.txt
+          wc -l safebrowsing.txt
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git rm -f blocked_*.conf 2>/dev/null || true
-          git add blocked_*.conf
+          git add blocked_*.txt safebrowsing.txt
           git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "Update blocked_*.conf"
+          git commit -m "Update rule-set txt files"
           git push
